@@ -254,8 +254,24 @@ elif "Revenue" in page:
     # 3. Filter Interaktif: Slider Top N
     top_n = st.slider("Tampilkan Top N Kategori", 5, 15, 10)
     
-    rev_data = filtered_df.sum().sort_values(ascending=False).head(top_n)
-    fig_rev = px.bar(rev_data, orientation='h', color=rev_data.values, color_continuous_scale='Teals')
+    # Mengubah Series menjadi DataFrame agar lebih mudah dikelola Plotly
+    rev_data = filtered_df.sum().sort_values(ascending=False).head(top_n).reset_index()
+    rev_data.columns = ['Category', 'Revenue']
+    
+    # Perbaikan: 'Teals' -> 'Teal'
+    fig_rev = px.bar(
+        rev_data, 
+        x='Revenue', 
+        y='Category', 
+        orientation='h', 
+        color='Revenue', 
+        color_continuous_scale='Teal', # Ini perbaikannya
+        title=f"Top {top_n} Kategori Berdasarkan Revenue"
+    )
+    
+    # Opsional: Mempercantik layout agar font tidak terpotong
+    fig_rev.update_layout(yaxis={'categoryorder':'total ascending'}, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#94a3b8")
+    
     st.plotly_chart(fig_rev, use_container_width=True)
 
 elif "Sentimen" in page:
