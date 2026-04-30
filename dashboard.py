@@ -134,17 +134,6 @@ html, body, [class*="css"] {
 }
 .insight-box strong { color: #5eead4; }
 
-/* Upload area */
-.upload-zone {
-    background: #1e293b;
-    border: 2px dashed #334155;
-    border-radius: 12px;
-    padding: 24px;
-    text-align: center;
-    color: #64748b;
-    font-size: 0.85rem;
-}
-
 /* Page title */
 .page-title {
     font-size: 2.2rem;
@@ -296,59 +285,6 @@ def generate_sample_data():
     }
 
 
-# ─────────────────────────────────────────────
-#  DATA LOADER (real CSVs if available)
-# ─────────────────────────────────────────────
-@st.cache_data
-def load_real_data(uploaded_files: dict):
-    try:
-        orders = pd.read_csv(uploaded_files['orders_dataset.csv'])
-        order_items = pd.read_csv(uploaded_files['order_items_dataset.csv'])
-        products = pd.read_csv(uploaded_files['products_dataset.csv'])
-        order_reviews = pd.read_csv(uploaded_files['order_reviews_dataset.csv'])
-        translation = pd.read_csv(uploaded_files['product_category_name_translation.csv'])
-
-        # Merge products with translation
-        merged_products = products.merge(translation, on='product_category_name', how='left')
-        order_items_products = order_items.merge(merged_products, on='product_id', how='left')
-        full_sales = order_items_products.merge(orders, on='order_id', how='left')
-        full_sales['order_purchase_timestamp'] = pd.to_datetime(full_sales['order_purchase_timestamp'], errors='coerce')
-        full_sales['sale_month_year'] = full_sales['order_purchase_timestamp'].dt.to_period('M')
-
-        monthly_df = full_sales.groupby(['sale_month_year', 'product_category_name_english'])['price'].sum().unstack().fillna(0)
-
-        selected_cats = [
-            'health_beauty', 'housewares', 'auto', 'bed_bath_table',
-            'furniture_decor', 'computers_accessories', 'sports_leisure',
-            'pet_shop', 'watches_gifts',
-        ]
-        valid_cats = [c for c in selected_cats if c in monthly_df.columns]
-        corr_matrix = monthly_df[valid_cats].corr()
-
-        period_mask = [(m.year in [2017, 2018]) for m in monthly_df.index]
-        rev_2017_2018 = monthly_df[period_mask].sum().sort_values(ascending=False)
-
-        comp_acc_cols = [c for c in ['computers', 'computers_accessories'] if c in monthly_df.columns]
-        comp_acc = monthly_df[comp_acc_cols].reset_index()
-        comp_acc['sale_month_year'] = comp_acc['sale_month_year'].astype(str)
-
-        order_reviews['review_score'] = pd.to_numeric(order_reviews['review_score'], errors='coerce')
-        reviews_merged = order_reviews.merge(full_sales[['order_id', 'product_category_name_english']], on='order_id', how='left')
-        review_df = reviews_merged.groupby('product_category_name_english')['review_score'].mean().reset_index()
-
-        return {
-            'monthly_df': monthly_df,
-            'corr_matrix': corr_matrix,
-            'rev_2017_2018': rev_2017_2018,
-            'comp_acc': comp_acc,
-            'review_df': review_df,
-            'total_revenue': full_sales['price'].sum(),
-            'total_orders': full_sales['order_id'].nunique(),
-            'n_categories': full_sales['product_category_name_english'].nunique(),
-            'selected_cats': valid_cats,
-        }, None
-    except Exception as e:
-        return None, str(e)
 
 
 # ─────────────────────────────────────────────
@@ -484,7 +420,7 @@ def plot_sentiment(review_df, top_n=10, best=True):
         textposition='outside',
         textfont=dict(color='#94a3b8', size=10),
     ))
-    label = 'Terbaik 🏆' if best else 'Terburuk ⚠️'
+    label = 'Terbaik' if best else 'Terburuk'
     fig.update_layout(**pl(
         title=dict(text=f'Top {top_n} Sentimen {label} · Avg Review Score', font=dict(color='#e2e8f0', size=15)),
         xaxis=dict(range=[0, 5.5], tickfont=dict(size=10), gridcolor='#1e293b'),
@@ -534,42 +470,10 @@ with st.sidebar:
     
     page = st.radio(
         "",
-        ["🏠  Overview", "📈  Tren Penjualan", "🔗  Korelasi Kategori",
-         "💰  Revenue 2017–2018", "⭐  Sentimen Pelanggan"],
+        ["Overview", "Tren Penjualan", "Korelasi Kategori",
+         "Revenue 2017–2018", "Sentimen Pelanggan"],
         label_visibility="collapsed",
     )
-
-    st.markdown("<hr style='border-color:#1e293b; margin: 20px 0;'>", unsafe_allow_html=True)
-
-    st.markdown("<div style='font-size:0.7rem; color:#475569; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:10px;'>Unggah Dataset</div>", unsafe_allow_html=True)
-
-    use_sample = st.toggle("Gunakan Data Sampel", value=True, help="Aktifkan untuk menggunakan data sintetis. Nonaktifkan untuk mengunggah dataset asli.")
-
-    uploaded = {}
-    real_data = None
-
-    if not use_sample:
-        required_files = [
-            'orders_dataset.csv', 'order_items_dataset.csv',
-            'products_dataset.csv', 'order_reviews_dataset.csv',
-            'product_category_name_translation.csv',
-        ]
-        st.markdown(f"<div style='font-size:0.78rem; color:#94a3b8; margin-bottom:8px;'>Upload {len(required_files)} file CSV dari dataset Olist:</div>", unsafe_allow_html=True)
-        
-        for fname in required_files:
-            f = st.file_uploader(fname, type='csv', key=fname, label_visibility="collapsed")
-            if f:
-                uploaded[fname] = f
-
-        if len(uploaded) == len(required_files):
-            real_data, err = load_real_data(uploaded)
-            if err:
-                st.error(f"Error: {err}")
-                real_data = None
-            else:
-                st.success("✅ Dataset berhasil dimuat!")
-        elif uploaded:
-            st.warning(f"Upload {len(required_files) - len(uploaded)} file lagi")
 
     st.markdown("<hr style='border-color:#1e293b; margin: 20px 0;'>", unsafe_allow_html=True)
     st.markdown("""
@@ -587,12 +491,7 @@ with st.sidebar:
 # ─────────────────────────────────────────────
 #  LOAD DATA
 # ─────────────────────────────────────────────
-if real_data:
-    data = real_data
-    data_source = "Dataset Asli (Olist)"
-else:
-    data = generate_sample_data()
-    data_source = "Data Sampel (Demo)"
+data = generate_sample_data()
 
 monthly_df = data['monthly_df']
 corr_matrix = data['corr_matrix']
@@ -604,19 +503,10 @@ review_df = data['review_df']
 # ─────────────────────────────────────────────
 #  HEADER (always shown)
 # ─────────────────────────────────────────────
-col_title, col_badge = st.columns([4, 1])
-with col_title:
-    st.markdown(f"""
+st.markdown("""
     <div class='page-title'>E-Commerce Analytics</div>
     <div class='page-subtitle'>Brazilian E-Commerce Public Dataset · Proyek Analisis Data</div>
     """, unsafe_allow_html=True)
-with col_badge:
-    st.markdown(f"""
-    <div style='text-align:right; padding-top:12px;'>
-        <span class='data-badge'>{'🟢' if real_data else '🔵'} {data_source}</span>
-    </div>
-    """, unsafe_allow_html=True)
-
 st.markdown("<hr style='border-color:#1e293b; margin: 16px 0 24px;'>", unsafe_allow_html=True)
 
 
@@ -684,7 +574,7 @@ if "Overview" in page:
 
     st.markdown("""
     <div class='insight-box'>
-        📌 Dashboard ini menjawab <strong>4 pertanyaan bisnis utama</strong> dari dataset e-commerce publik (Olist Brazil):<br><br>
+        Dashboard ini menjawab <strong>4 pertanyaan bisnis utama</strong> dari dataset e-commerce publik (Olist Brazil):<br><br>
         <strong>1. Tren Penjualan</strong> — Apakah penjualan komputer dan aksesoris komputer bergerak secara linear?<br>
         <strong>2. Korelasi Kategori</strong> — Bagaimana preferensi pelanggan berdasarkan korelasi antar kategori produk?<br>
         <strong>3. Revenue 2017–2018</strong> — Kategori produk apa yang menghasilkan pendapatan terbesar?<br>
@@ -731,13 +621,13 @@ elif "Tren" in page:
 
     st.markdown("""
     <div class='insight-box'>
-        🔍 <strong>Insight:</strong> Penjualan produk kategori <strong>computers</strong> dan <strong>computers_accessories</strong>
+        <strong>Insight:</strong> Penjualan produk kategori <strong>computers</strong> dan <strong>computers_accessories</strong>
         <strong>tidak sepenuhnya linear</strong>. Aksesoris komputer jauh lebih fluktuatif dibanding komputer itu sendiri.
         Terdapat lonjakan signifikan pada pertengahan 2017 (Juli–Oktober), kemungkinan dipicu oleh kampanye promosi
         atau musim belanja. Kategori <em>computers</em> cenderung lebih stabil dengan pertumbuhan moderat.
     </div>""", unsafe_allow_html=True)
 
-    with st.expander("📋 Lihat Data Tabel"):
+    with st.expander("Lihat Data Tabel"):
         st.dataframe(comp_acc.set_index('sale_month_year').style.format("{:,.0f}"), use_container_width=True)
 
 
@@ -803,13 +693,13 @@ elif "Revenue" in page:
 
     st.markdown(f"""
     <div class='insight-box'>
-        🔍 <strong>Insight:</strong> Kategori <strong>{top_cat_name}</strong> mendominasi dengan revenue tertinggi
+        <strong>Insight:</strong> Kategori <strong>{top_cat_name}</strong> mendominasi dengan revenue tertinggi
         (R$ {top_cat_rev/1e6:.2f}M, sekitar {pct:.1f}% dari total top-{top_n}).
         Ini mengindikasikan produk kecantikan & kesehatan adalah segmen terkuat di platform ini.
         Kategori-kategori ini harus menjadi prioritas dalam strategi promosi, manajemen stok, dan pengembangan produk.
     </div>""", unsafe_allow_html=True)
 
-    with st.expander("📋 Lihat Semua Kategori"):
+    with st.expander("Lihat Semua Kategori"):
         all_rev = rev_2017_2018.reset_index()
         all_rev.columns = ['Kategori', 'Revenue (BRL)']
         all_rev['Kategori'] = all_rev['Kategori'].str.replace('_', ' ').str.title()
@@ -829,7 +719,7 @@ elif "Sentimen" in page:
         </div>
     </div>""", unsafe_allow_html=True)
 
-    tab_best, tab_worst = st.tabs(["🏆 Sentimen Terbaik", "⚠️ Sentimen Terburuk"])
+    tab_best, tab_worst = st.tabs(["Sentimen Terbaik", "Sentimen Terburuk"])
 
     with tab_best:
         top_n_sent = st.slider("Top N kategori", 5, 15, 10, key='best_n')
@@ -837,7 +727,7 @@ elif "Sentimen" in page:
         best_cat = review_df.dropna().sort_values('review_score', ascending=False).iloc[0]
         st.markdown(f"""
         <div class='insight-box'>
-            🏆 <strong>{best_cat['product_category_name_english'].replace('_',' ').title()}</strong>
+            <strong>{best_cat['product_category_name_english'].replace('_',' ').title()}</strong>
             mendapatkan rating rata-rata tertinggi ({best_cat['review_score']:.2f}/5.00 ★).
             Kategori ini menunjukkan kepuasan pelanggan yang sangat tinggi — kualitas produk, harga,
             dan pengalaman belanja yang luar biasa kemungkinan menjadi faktor utama.
@@ -849,7 +739,7 @@ elif "Sentimen" in page:
         worst_cat = review_df.dropna().sort_values('review_score', ascending=True).iloc[0]
         st.markdown(f"""
         <div class='insight-box'>
-            ⚠️ <strong>{worst_cat['product_category_name_english'].replace('_',' ').title()}</strong>
+            <strong>{worst_cat['product_category_name_english'].replace('_',' ').title()}</strong>
             mendapatkan rating rata-rata terendah ({worst_cat['review_score']:.2f}/5.00 ★).
             Kategori ini perlu investigasi lebih lanjut — kemungkinan disebabkan oleh
             kualitas produk yang tidak sesuai ekspektasi, masalah pengiriman, atau layanan purna jual yang buruk.
