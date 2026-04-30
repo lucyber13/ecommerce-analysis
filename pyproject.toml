@@ -1,7 +1,0 @@
-[project]
-name = "submission-analisis-data"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-python = ">=3.9,<3.13"
-dependencies = []
